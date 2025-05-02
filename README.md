@@ -1,7 +1,7 @@
 
 # Workshop 5 - Sistema IoT de Monitoreo de Temperatura
 
-Este proyecto implementa un sistema de monitoreo de temperatura utilizando un microcontrolador **ESP32** y una red de **comunicación I2C** entre dos placas **Arduino UNO** (master y slave). La temperatura es medida mediante un sensor analógico (TMP36 o LM35), procesada y visualizada en ThingSpeak a través de la nube.
+Este proyecto implementa un sistema de monitoreo de temperatura utilizando un microcontrolador **ESP32** y una red de **comunicación I2C** con **Arduino UNO** (master y slave). La temperatura es medida mediante un sensor analógico (TMP36), procesada y visualizada en ThingSpeak a través de la nube.
 
 ---
 
@@ -10,7 +10,7 @@ Este proyecto implementa un sistema de monitoreo de temperatura utilizando un mi
 - ESP32 (simulado en [Wokwi](https://wokwi.com/))
 - ThingSpeak para visualización IoT
 - Arduino UNO (master y slave) usando comunicación I2C
-- Sensor de temperatura TMP36 o LM35
+- Sensor de temperatura TMP36 
 - LCD 16x2
 - TinkerCAD para simulación de Arduinos
 
@@ -34,8 +34,13 @@ Se utilizaron dos placas Arduino simuladas en TinkerCAD, conectadas vía **I2C**
 | GND   | GND    | GND   |
 
 ---
+![image](https://github.com/user-attachments/assets/32391510-06e4-4078-ab45-773d436cc62b)
+
+## Diagrama de funcionalidad
+![image](https://github.com/user-attachments/assets/ef3d3319-c3ae-447d-b91b-21b71f6d8175)
 
 ##  Códigos Documentados
+
 
 ### Arduino Slave
 
@@ -133,46 +138,111 @@ void loop() {
 ###  ESP32 + ThingSpeak (en Wokwi)
 
 ```cpp
-#include <WiFi.h>
-#include "ThingSpeak.h"
+// ***********************************************
+// Configuración de red y API Key de ThingSpeak
+// ***********************************************
 
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
-WiFiClient client;
+const char* WIFI_SSID = "Wokwi-GUEST";         // Nombre de la red WiFi simulada en Wokwi
+const char* WIFI_PASS = "";                    // Contraseña de la red (vacía en Wokwi)
+const char* API_KEY   = "NWP8EHDC05BK7TVD";    // Clave de escritura de tu canal en ThingSpeak
 
-// Canal ThingSpeak
-unsigned long myChannelNumber = 2488960;
-const char* myWriteAPIKey = "Y9FW4C6AW3CQ7KY9";
+#define SIM_MODE      1    // Modo simulación activado: 1 = usa temperatura simulada; 0 = lectura real vía I2C
 
-const int sensorPin = 34; // Pin analógico en ESP32
-float temperature;
+// ***********************************************
+// Librerías necesarias
+// ***********************************************
+
+#include <WiFi.h>             // Para conexión WiFi
+#include <HTTPClient.h>       // Para enviar solicitudes HTTP
+#include <Wire.h>             // Para comunicación I2C (si se usa Arduino esclavo)
+
+// ***********************************************
+// Variables de configuración
+// ***********************************************
+
+const uint8_t SLAVE_ADDR = 0x08;   // Dirección I2C del Arduino esclavo
+const int LED_PIN = 2;             // Pin del LED que se enciende si la temperatura > 30°C
+
+// ***********************************************
+// Setup inicial
+// ***********************************************
 
 void setup() {
-  Serial.begin(115200);
-  WiFi.begin(ssid, password);
+  Serial.begin(115200);               // Inicializa el puerto serie
+  pinMode(LED_PIN, OUTPUT);          // Configura el pin del LED como salida
+
+  // Configuración del bus I2C (si se usa)
+  Wire.begin(21, 22, 400000);        // SDA = GPIO21, SCL = GPIO22, velocidad = 400kHz
+
+  // Conexión a la red WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("Conectando WiFi");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
+    Serial.print('.');
+    delay(500);
   }
-  ThingSpeak.begin(client);
+  Serial.println("  ¡OK!");
 }
 
+// ***********************************************
+// Bucle principal
+// ***********************************************
+
 void loop() {
-  int adc = analogRead(sensorPin);
-  float voltage = (adc / 4095.0) * 3.3;
-  temperature = (voltage - 0.5) * 100;
+  float tempC = leerTemperatura();          // Obtiene la temperatura en °C
 
-  // Envío a ThingSpeak
-  ThingSpeak.setField(1, temperature);
-  int response = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
-
-  if (response == 200) {
-    Serial.println("Datos enviados correctamente");
-  } else {
-    Serial.print("Error al enviar: ");
-    Serial.println(response);
+  if (isnan(tempC)) {                       // Si la lectura falló (NaN), reintenta luego
+    delay(5000);
+    return;
   }
 
-  delay(15000);  // ThingSpeak requiere mínimo 15 s entre envíos
+  // Enciende el LED si la temperatura supera los 30°C
+  digitalWrite(LED_PIN, tempC > 30.0);
+
+  // Envío de datos a ThingSpeak vía HTTP GET
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "https://api.thingspeak.com/update?api_key=";
+    url += API_KEY;
+    url += "&field1=";
+    url += String(tempC, 1);   // Solo 1 decimal
+
+    http.begin(url);                  // Inicializa la conexión
+    int rc = http.GET();             // Ejecuta el GET
+    Serial.printf("TS rc=%d  T=%.1f °C\n", rc, tempC);
+    http.end();                      // Finaliza la conexión
+  } else {
+    Serial.println("WiFi caída, re-intentando...");
+  }
+
+  delay(15000);   // Espera 15 segundos (mínimo entre publicaciones en ThingSpeak)
+}
+
+// ***********************************************
+// Función para obtener la temperatura
+// ***********************************************
+
+float leerTemperatura() {
+#if SIM_MODE
+  // Modo simulación: genera valores entre 25°C y 35°C como onda triangular
+  static float v = 25;
+  static int dir = 1;
+  v += 0.6 * dir;
+  if (v > 35 || v < 25) dir *= -1;
+  return v;
+
+#else
+  // Lectura real vía I2C desde Arduino esclavo
+  Wire.requestFrom(SLAVE_ADDR, (uint8_t)2);
+  if (Wire.available() == 2) {
+    uint16_t adc = (Wire.read() << 8) | Wire.read();  // Lee 2 bytes (16 bits)
+    
+    // Convierte la señal analógica del TMP36 a grados Celsius
+    return ((((adc * 5.0) / 1024.0) * 1000.0) - 500.0) / 10.0;
+  }
+  Serial.println("I²C vacío");   // Error de lectura
+  return NAN;
+#endif
 }
 ```
 
@@ -182,7 +252,8 @@ void loop() {
 
 Los datos enviados desde el ESP32 son registrados y graficados automáticamente en el dashboard de ThingSpeak.
 
-![Visualización ThingSpeak](./6F919603-9893-4B2F-868C-F1712EA475D6.png)
+![image](https://github.com/user-attachments/assets/cf16d346-e257-4225-a28d-1f96c3c53c39)
+
 
 - **Field 1 Chart**: Muestra cómo varía la temperatura a lo largo del tiempo.
 - **Temp**: Muestra la última lectura registrada.
@@ -201,10 +272,15 @@ Este sistema permite integrar sensores físicos con plataformas IoT para la visu
 La implementación permite generar alertas visuales locales (LED) y remotas (dashboard IoT), ofreciendo una solución efectiva para monitoreo ambiental o de procesos industriales.
 
 ---
+## Referencias:
+[1] ChatGPT, “Asistente de referencia IEEE para artículo ‘Implementation and Experimental Application of Industrial IoT Architecture Using Automation and IoT Hardware/Software’,”, 1-2 de mayo de 2025.
 
-## ✍️ Autor
+##  Autores
 
 **Julián Pulido**  
-Ingeniería Informática – Universidad de La Sabana  
-Workshop 5 - Automatización y Control de Procesos  
-2025-1
+Wiki y conexión thingspeak
+
+**Juan Diego García**  
+Simulación thinkercad y wokwi
+
+
