@@ -1,1 +1,210 @@
-# Workshop-5
+
+# Workshop 5 - Sistema IoT de Monitoreo de Temperatura
+
+Este proyecto implementa un sistema de monitoreo de temperatura utilizando un microcontrolador **ESP32** y una red de **comunicación I2C** entre dos placas **Arduino UNO** (master y slave). La temperatura es medida mediante un sensor analógico (TMP36 o LM35), procesada y visualizada en ThingSpeak a través de la nube.
+
+---
+
+## Tecnologías Utilizadas
+
+- ESP32 (simulado en [Wokwi](https://wokwi.com/))
+- ThingSpeak para visualización IoT
+- Arduino UNO (master y slave) usando comunicación I2C
+- Sensor de temperatura TMP36 o LM35
+- LCD 16x2
+- TinkerCAD para simulación de Arduinos
+
+---
+
+##  Lógica del Proyecto
+
+### 1. Comunicación I2C entre Arduinos
+
+Se utilizaron dos placas Arduino simuladas en TinkerCAD, conectadas vía **I2C**, donde:
+
+- **El Arduino slave** lee el valor analógico del sensor TMP36 desde el pin A0.
+- **El Arduino master** solicita los datos por I2C al slave, calcula la temperatura en °C, la muestra en una pantalla LCD 16x2 y activa un LED de alerta si la temperatura supera los 30 °C.
+
+#### Conexiones I2C entre Arduinos
+
+| Señal | Master | Slave |
+|-------|--------|-------|
+| SDA   | A4     | A4    |
+| SCL   | A5     | A5    |
+| GND   | GND    | GND   |
+
+---
+
+##  Códigos Documentados
+
+### Arduino Slave
+
+```cpp
+#include <Wire.h>
+
+// Dirección del esclavo I2C (decimal 8 = 0x08)
+const uint8_t SLAVE_ADDR = 0x08;
+// Pin de entrada analógica para el sensor TMP36 o LM35
+const int TMP_PIN = A0;
+
+// Variable global para almacenar la última lectura del sensor (0-1023)
+volatile uint16_t adcRaw = 0;
+// Variable para controlar el tiempo de muestreo
+unsigned long tStamp = 0;
+
+void setup() {
+  Wire.begin(SLAVE_ADDR);           // Configura el Arduino como esclavo I2C
+  Wire.onRequest(sendData);         // Callback al recibir solicitud del master
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Lee el sensor cada 1 segundo
+  if (millis() - tStamp >= 1000) {
+    adcRaw = analogRead(TMP_PIN);   // Lectura del sensor
+    Serial.print("ADC = ");
+    Serial.println(adcRaw);         // Muestra la lectura en el monitor serial
+    tStamp = millis();
+  }
+}
+
+// Envía los datos al master en formato de 2 bytes (MSB primero)
+void sendData() {
+  Wire.write(highByte(adcRaw));
+  Wire.write(lowByte(adcRaw));
+}
+```
+
+---
+
+### Arduino Master
+
+```cpp
+#include <Wire.h>
+#include <LiquidCrystal.h>
+
+// Dirección I2C del esclavo
+const uint8_t SLAVE_ADDR = 0x08;
+const int LED_PIN = 13;                 // LED de alerta si T > 30 °C
+
+// Configuración del LCD: RS,E,D4,D5,D6,D7
+LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+
+void setup() {
+  Wire.begin();                         // Configura como master
+  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+  lcd.begin(16, 2);                     // LCD 16x2
+  lcd.print("TEMP (C):");
+}
+
+void loop() {
+  // Solicita dos bytes al esclavo
+  Wire.requestFrom(SLAVE_ADDR, (uint8_t)2);
+
+  if (Wire.available() == 2) {
+    // Combina los dos bytes recibidos
+    uint16_t adcRaw = (Wire.read() << 8) | Wire.read();
+    // Conversión a temperatura en °C
+    float celsius = ((((adcRaw * 5.0) / 1024.0) * 1000.0) - 500.0) / 10.0;
+
+    // Muestra por monitor serial
+    Serial.print("ADC: ");
+    Serial.print(adcRaw);
+    Serial.print("  T: ");
+    Serial.println(celsius, 1);
+
+    // Muestra en LCD
+    lcd.setCursor(0, 1);
+    lcd.print("                ");  // Limpia la línea
+    lcd.setCursor(0, 1);
+    lcd.print(celsius, 1);
+
+    // Activa LED si la temperatura supera 30 °C
+    digitalWrite(LED_PIN, (celsius > 30.0) ? HIGH : LOW);
+  }
+
+  delay(1000);  // Espera 1 segundo
+}
+```
+
+---
+
+###  ESP32 + ThingSpeak (en Wokwi)
+
+```cpp
+#include <WiFi.h>
+#include "ThingSpeak.h"
+
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+WiFiClient client;
+
+// Canal ThingSpeak
+unsigned long myChannelNumber = 2488960;
+const char* myWriteAPIKey = "Y9FW4C6AW3CQ7KY9";
+
+const int sensorPin = 34; // Pin analógico en ESP32
+float temperature;
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+  }
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  int adc = analogRead(sensorPin);
+  float voltage = (adc / 4095.0) * 3.3;
+  temperature = (voltage - 0.5) * 100;
+
+  // Envío a ThingSpeak
+  ThingSpeak.setField(1, temperature);
+  int response = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+
+  if (response == 200) {
+    Serial.println("Datos enviados correctamente");
+  } else {
+    Serial.print("Error al enviar: ");
+    Serial.println(response);
+  }
+
+  delay(15000);  // ThingSpeak requiere mínimo 15 s entre envíos
+}
+```
+
+---
+
+##  Visualización en ThingSpeak
+
+Los datos enviados desde el ESP32 son registrados y graficados automáticamente en el dashboard de ThingSpeak.
+
+![Visualización ThingSpeak](./6F919603-9893-4B2F-868C-F1712EA475D6.png)
+
+- **Field 1 Chart**: Muestra cómo varía la temperatura a lo largo del tiempo.
+- **Temp**: Muestra la última lectura registrada.
+- **Alerta**: Indicador visual que se activa si la temperatura supera los 30 °C (círculo rojo).
+
+---
+
+##  Resultados y Conclusión
+
+Este sistema permite integrar sensores físicos con plataformas IoT para la visualización y análisis remoto de datos en tiempo real. Se probaron con éxito:
+
+- La lectura y transmisión de temperatura por I2C entre dos Arduinos
+- La simulación del sensor en ESP32 con Wokwi
+- La conexión y visualización de datos en ThingSpeak
+
+La implementación permite generar alertas visuales locales (LED) y remotas (dashboard IoT), ofreciendo una solución efectiva para monitoreo ambiental o de procesos industriales.
+
+---
+
+## ✍️ Autor
+
+**Julián Pulido**  
+Ingeniería Informática – Universidad de La Sabana  
+Workshop 5 - Automatización y Control de Procesos  
+2025-1
