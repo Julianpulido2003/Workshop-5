@@ -273,7 +273,7 @@ La implementación permite generar alertas visuales locales (LED) y remotas (das
 
 ---
 ## Referencias:
-[1] ChatGPT, “Asistente de referencia IEEE para artículo ‘Implementation and Experimental Application of Industrial IoT Architecture Using Automation and IoT Hardware/Software’,”, 1-2 de mayo de 2025.
+[1] OpenAI, “ChatGPT,” ChatGPT, [En línea]. Disponible en: https://chat.openai.com/. [Accedido: 2-may-2025].
 
 ##  Autores
 
