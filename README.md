@@ -275,12 +275,44 @@ La implementación permite generar alertas visuales locales (LED) y remotas (das
 ## Referencias:
 [1] OpenAI, “ChatGPT,” ChatGPT, [En línea]. Disponible en: https://chat.openai.com/. [Accedido: 2-may-2025].
 
-##  Autores
+##  Autores y Acta de Reunión
 
 **Julián Pulido**  
 Wiki y conexión thingspeak
 
 **Juan Diego García**  
 Simulación thinkercad y wokwi
+
+ACTA DE REUNIÓN – Proyecto IoT: Monitoreo de Temperatura con ESP32 y ThingSpeak
+
+Fecha de primera sesión: Lunes 28 de abril de 2025
+Hora: 7:00 a.m. – 9:00 a.m.
+Lugar: Universidad de La Sabana – Sala de clase / Virtual TinkerCad & Wokwi
+Participantes:
+	•	Julián Pulido
+	•	Juan Diego García
+	•	Profesor guía: [Nombre del profesor, si aplica]
+
+⸻
+
+Objetivo de la reunión
+
+Desarrollar el sistema de monitoreo de temperatura basado en ESP32, simulación con Wokwi y diseño estructural del sistema en TinkerCad, para avanzar en el proyecto de IoT propuesto.
+
+⸻
+
+
+⸻
+
+📅 Segunda reunión (cierre)
+
+Fecha: Viernes 2 de mayo de 2025
+Hora: 7:00 p.m. – 8:00 p.m.
+Objetivo: Finalizar documentación, subir la Wiki, y alistar informe final con capturas, código comentado y evidencias gráficas.
+
+⸻
+<img width="652" alt="image" src="https://github.com/user-attachments/assets/bba28a23-7075-41e4-ac54-6146fd771a1c" />
+
+\
 
 
